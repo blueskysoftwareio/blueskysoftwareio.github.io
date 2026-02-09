@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 60" width="480" height="60">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@700');
+      .text-dark { fill: #0f172a; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 36px; }
+      .text-blue { fill: #0284c7; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 36px; }
+    </style>
+    <linearGradient id="sky" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+  </defs>
+  <!-- Icon: code bracket + sky arc -->
+  <g transform="translate(0, 6)">
+    <!-- Left bracket -->
+    <path d="M16 8 L4 24 L16 40" fill="none" stroke="url(#sky)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Right bracket -->
+    <path d="M32 8 L44 24 L32 40" fill="none" stroke="url(#sky)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Sky arc -->
+    <path d="M12 16 Q24 2 36 16" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <!-- Text -->
+  <text x="58" y="42" class="text-dark">Blue Sky</text>
+  <text x="236" y="42" class="text-blue">Software</text>
+</svg>
