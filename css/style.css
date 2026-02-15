@@ -154,6 +154,10 @@ section {
   letter-spacing: -0.01em;
 }
 
+.logo {
+  color: var(--slate-900);
+}
+
 .logo span {
   color: var(--blue-600);
 }

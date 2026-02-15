@@ -7,6 +7,6 @@
     </style>
   </defs>
   <text y="42">
-    <tspan x="0" class="text-dark">Blue Sky </tspan><tspan class="text-blue">Software</tspan>
+    <tspan x="0" class="text-blue">Blue Sky </tspan><tspan class="text-dark">Software</tspan>
   </text>
 </svg>
