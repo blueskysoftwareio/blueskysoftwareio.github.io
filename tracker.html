@@ -229,14 +229,36 @@
   }
   .day-card.collapsed .day-body { display: none; }
   .time-entry {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 0;
+    padding: 6px 0;
     font-size: 13px;
     border-bottom: 1px solid #0a1628;
   }
   .time-entry:last-child { border-bottom: none; }
+  .time-entry .te-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .time-entry .te-note {
+    font-size: 11px;
+    color: #888;
+    margin-top: 3px;
+    padding: 2px 4px;
+    line-height: 1.3;
+    border-radius: 3px;
+    outline: none;
+    min-height: 16px;
+    max-height: 48px;
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .time-entry .te-note:hover { background: rgba(255,255,255,0.03); }
+  .time-entry .te-note:focus { background: #0a1628; border: 1px solid #0f3460; color: #ccc; max-height: 120px; overflow-y: auto; }
+  .time-entry .te-note:empty::before {
+    content: attr(data-placeholder);
+    color: #444;
+  }
   .time-entry .te-client { color: #e94560; font-weight: 600; flex: 1; }
   .time-entry .te-time { color: #888; font-size: 12px; }
   .time-entry .te-hours { color: #fff; font-weight: 600; min-width: 40px; text-align: right; }
@@ -262,7 +284,7 @@
     margin-top: 8px;
     flex-wrap: wrap;
   }
-  .add-time-row input, .add-time-row select {
+  .add-time-row input, .add-time-row select, .add-time-row textarea {
     background: #0a1628;
     border: 1px solid #0f3460;
     color: #e0e0e0;
@@ -270,7 +292,7 @@
     border-radius: 4px;
     font-size: 12px;
   }
-  .add-time-row input:focus, .add-time-row select:focus {
+  .add-time-row input:focus, .add-time-row select:focus, .add-time-row textarea:focus {
     outline: none;
     border-color: #e94560;
   }
@@ -325,8 +347,14 @@
     border-radius: 6px;
     font-size: 14px;
     font-family: inherit;
+  }
+  .modal select {
     appearance: none;
     -webkit-appearance: none;
+  }
+  .modal input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+    cursor: pointer;
   }
   .modal select {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
@@ -417,6 +445,18 @@ function parseTime(str) {
   if (period === 'p' || period === 'pm') { if (h < 12) h += 12; }
   if (period === 'a' || period === 'am') { if (h === 12) h = 0; }
   return h + min / 60;
+}
+
+function formatTime(str) {
+  str = str.trim().toLowerCase().replace(/\s+/g, '');
+  const m = str.match(/^(\d{1,2})(?::?(\d{2}))?\s*(a|am|p|pm)?$/);
+  if (!m) return str;
+  let h = parseInt(m[1]);
+  const min = m[2] ? parseInt(m[2]) : 0;
+  const period = m[3];
+  if (period === 'p' || period === 'pm') { if (h < 12) h += 12; }
+  if (period === 'a' || period === 'am') { if (h === 12) h = 0; }
+  return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
 }
 
 function calcHours(start, end) {
@@ -551,6 +591,11 @@ function renderProjects() {
       }
     });
 
+    el.addEventListener('click', e => {
+      if (e.target.closest('a, button, .notes, .notes-expand')) return;
+      editCard(index);
+    });
+
     area.appendChild(el);
   });
 
@@ -619,11 +664,14 @@ function renderTime() {
       <div class="day-body">
         ${dayEntries.map(entry => `
           <div class="time-entry ${entry.invoiced ? 'invoiced' : ''}">
-            <span class="te-client">${escapeHtml(entry.client)}</span>
-            <span class="te-time">${escapeHtml(entry.start)} – ${escapeHtml(entry.end)}</span>
-            <span class="te-hours">${formatHours(entry.hours)}</span>
-            <input type="checkbox" class="te-invoice" ${entry.invoiced ? 'checked' : ''} data-id="${entry.id}">
-            <button class="te-delete" onclick="deleteTimeEntry('${entry.id}')">✕</button>
+            <div class="te-row">
+              <span class="te-client">${escapeHtml(entry.client)}</span>
+              <span class="te-time">${escapeHtml(entry.start)} – ${escapeHtml(entry.end)}</span>
+              <span class="te-hours">${formatHours(entry.hours)}</span>
+              <input type="checkbox" class="te-invoice" ${entry.invoiced ? 'checked' : ''} data-id="${entry.id}">
+              <button class="te-delete" onclick="deleteTimeEntry('${entry.id}')">✕</button>
+            </div>
+            <div class="te-note" contenteditable="true" data-id="${entry.id}" data-placeholder="Add note...">${escapeHtml(entry.note || '')}</div>
           </div>
         `).join('')}
         <div class="add-time-row">
@@ -631,15 +679,54 @@ function renderTime() {
             <option value="">Client</option>
             ${getClients().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
           </select>
-          <input type="text" class="time-input" id="ts-${ds}" placeholder="9am">
-          <input type="text" class="time-input" id="te-${ds}" placeholder="11am">
+          <input type="text" class="time-input" id="ts-${ds}" placeholder="09:00">
+          <input type="text" class="time-input" id="te-${ds}" placeholder="17:00">
           <button onclick="addTimeEntry('${ds}')">+</button>
+          <textarea class="time-note-input" id="tn-${ds}" placeholder="What for..." rows="1" style="width:100%;margin-top:4px;resize:none;overflow:hidden;"></textarea>
         </div>
       </div>
     `;
     col.appendChild(dayCard);
   }
   setupInvoiceCheckboxes();
+
+  // Save note on blur
+  document.querySelectorAll('.te-note[contenteditable]').forEach(el => {
+    el.addEventListener('blur', () => {
+      const id = el.dataset.id;
+      const entry = data.timeEntries.find(e => e.id === id);
+      if (entry) {
+        entry.note = el.textContent.trim();
+        saveData(data);
+      }
+    });
+  });
+
+  // Enter to save on all time entry inputs
+  document.querySelectorAll('.add-time-row input, .add-time-row select').forEach(el => {
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const ds = el.closest('.day-body').querySelector('.time-note-input').id.replace('tn-', '');
+        addTimeEntry(ds);
+      }
+    });
+  });
+
+  // Auto-grow textareas + Enter to save (Shift+Enter for newline)
+  document.querySelectorAll('.time-note-input').forEach(ta => {
+    const ds = ta.id.replace('tn-', '');
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    });
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        addTimeEntry(ds);
+      }
+    });
+  });
 }
 
 // ── Actions ──
@@ -660,7 +747,9 @@ function addTimeEntry(date) {
   if (!end) { endEl.style.borderColor = '#e94560'; return; }
   const hours = calcHours(start, end);
   if (hours <= 0) { startEl.style.borderColor = '#e94560'; endEl.style.borderColor = '#e94560'; return; }
-  data.timeEntries.push({ id: uid(), date, client, start, end, hours });
+  const noteEl = document.getElementById('tn-' + date);
+  const note = noteEl ? noteEl.value.trim() : '';
+  data.timeEntries.push({ id: uid(), date, client, start: formatTime(start), end: formatTime(end), hours, note });
   saveData(data);
   renderTime();
 }
