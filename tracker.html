@@ -20,12 +20,41 @@
     padding: 20px;
     min-height: 100vh;
   }
-  .projects-area {
+  .projects-container {
     grid-column: 1 / 3;
+    display: flex;
+    flex-direction: column;
+  }
+  .client-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .client-tab {
+    background: #0f3460;
+    border: 1px solid #0f3460;
+    color: #888;
+    padding: 6px 16px;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.2s, color 0.2s;
+  }
+  .client-tab:hover { color: #ccc; }
+  .client-tab.active {
+    background: #16213e;
+    color: #e94560;
+    border-color: #e94560;
+    border-bottom-color: #16213e;
+  }
+  .projects-area {
     display: flex;
     flex-wrap: wrap;
     align-content: flex-start;
     gap: 16px;
+    flex: 1;
   }
 
   /* Project Cards */
@@ -394,7 +423,10 @@
 <body>
 
 <div class="app">
-  <div class="projects-area" id="projectsArea"></div>
+  <div class="projects-container">
+    <div class="client-tabs" id="clientTabs"></div>
+    <div class="projects-area" id="projectsArea"></div>
+  </div>
   <div class="time-column" id="timeColumn"></div>
 </div>
 
@@ -523,15 +555,42 @@ function addClient(name) {
   }
 }
 
+// ── Tab state ──
+let activeTab = 'All';
+
 // ── Week navigation ──
 let currentWeekStart = getMonday(new Date());
 
 // ── Render: Projects ──
+function renderTabs() {
+  const tabsEl = document.getElementById('clientTabs');
+  const clients = getClients();
+  tabsEl.innerHTML = '';
+
+  const allTab = document.createElement('div');
+  allTab.className = 'client-tab' + (activeTab === 'All' ? ' active' : '');
+  allTab.textContent = 'All';
+  allTab.onclick = () => { activeTab = 'All'; renderTabs(); renderProjects(); };
+  tabsEl.appendChild(allTab);
+
+  clients.forEach(client => {
+    const tab = document.createElement('div');
+    tab.className = 'client-tab' + (activeTab === client ? ' active' : '');
+    tab.textContent = client;
+    tab.onclick = () => { activeTab = client; renderTabs(); renderProjects(); };
+    tabsEl.appendChild(tab);
+  });
+}
+
 function renderProjects() {
   const area = document.getElementById('projectsArea');
   area.innerHTML = '';
 
-  data.cards.forEach((card, index) => {
+  const filteredCards = activeTab === 'All'
+    ? data.cards.map((card, index) => ({ card, index }))
+    : data.cards.map((card, index) => ({ card, index })).filter(({ card }) => card.client === activeTab);
+
+  filteredCards.forEach(({ card, index }) => {
     const el = document.createElement('div');
     el.className = 'card';
     el.draggable = true;
@@ -932,6 +991,7 @@ function saveCard(index) {
   }
   saveData(data);
   closeModal();
+  renderTabs();
   renderProjects();
   renderTime(); // refresh client dropdowns
 }
@@ -984,6 +1044,7 @@ document.addEventListener('keydown', e => {
 // ── Init ──
 (async () => {
   data = await loadData();
+  renderTabs();
   renderProjects();
   renderTime();
 })();
