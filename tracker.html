@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yak</title>
+<link rel="icon" type="image/png" href="yak-favicon.png">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    min-height: 100vh;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 1fr 1fr 380px;
+    gap: 20px;
+    padding: 20px;
+    min-height: 100vh;
+  }
+  .projects-area {
+    grid-column: 1 / 3;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 16px;
+  }
+
+  /* Project Cards */
+  .card {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 10px;
+    padding: 16px;
+    width: calc(50% - 8px);
+    cursor: grab;
+    transition: box-shadow 0.2s, border-color 0.2s;
+    position: relative;
+  }
+  .card:hover { border-color: #e94560; }
+  .card.dragging { opacity: 0.4; }
+  .card.drag-over { border-color: #e94560; box-shadow: 0 0 12px rgba(233,69,96,0.3); }
+  .card .project {
+    font-size: 14px;
+    font-weight: 700;
+    color: #e94560;
+    margin-bottom: 2px;
+  }
+  .card .client {
+    font-size: 12px;
+    font-weight: 600;
+    color: #aaa;
+    margin-bottom: 4px;
+  }
+  .card .ticket {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 10px;
+  }
+  .card .ticket a { color: #5a9fd4; text-decoration: none; }
+  .card .ticket a:hover { text-decoration: underline; }
+  .card .field-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #666;
+    margin-top: 10px;
+    margin-bottom: 3px;
+  }
+  .card .description, .card .notes {
+    font-size: 13px;
+    color: #ccc;
+    line-height: 1.4;
+    white-space: pre-wrap;
+  }
+  .card .followup {
+    font-size: 12px;
+    color: #f0a500;
+    margin-top: 8px;
+  }
+  .card .followup.overdue { color: #e94560; }
+  .card .card-actions {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .card:hover .card-actions { opacity: 1; }
+  .card-actions button {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .card-actions button:hover { color: #e94560; background: rgba(233,69,96,0.1); }
+
+  /* Add Card Button */
+  .add-card {
+    width: calc(50% - 8px);
+    min-height: 120px;
+    background: transparent;
+    border: 2px dashed #0f3460;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #0f3460;
+    font-size: 32px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .add-card:hover { border-color: #e94560; color: #e94560; }
+
+  /* Time Column */
+  .time-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .time-header {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+  .time-header .week-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+  }
+  .time-header .total-hours {
+    font-size: 36px;
+    font-weight: 700;
+    color: #e94560;
+  }
+  .time-header .total-label {
+    font-size: 12px;
+    color: #888;
+  }
+  .time-header .week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .time-header .week-nav button {
+    background: none;
+    border: 1px solid #0f3460;
+    color: #ccc;
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .time-header .week-nav button:hover { border-color: #e94560; color: #e94560; }
+  .time-header .week-range { font-size: 12px; color: #aaa; }
+
+  .day-card {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .day-card .day-header {
+    padding: 10px 16px;
+    background: #0f3460;
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+  .day-card .day-header .day-total {
+    color: #e94560;
+    font-size: 12px;
+  }
+  .day-card .day-body {
+    padding: 12px 16px;
+  }
+  .day-card.collapsed .day-body { display: none; }
+  .time-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 13px;
+    border-bottom: 1px solid #0a1628;
+  }
+  .time-entry:last-child { border-bottom: none; }
+  .time-entry .te-client { color: #e94560; font-weight: 600; flex: 1; }
+  .time-entry .te-time { color: #888; font-size: 12px; }
+  .time-entry .te-hours { color: #fff; font-weight: 600; min-width: 40px; text-align: right; }
+  .time-entry .te-delete {
+    background: none; border: none; color: #444; cursor: pointer;
+    font-size: 12px; padding: 2px 4px; border-radius: 3px;
+  }
+  .time-entry .te-delete:hover { color: #e94560; }
+  .time-entry .te-invoice {
+    width: 13px; height: 13px; cursor: pointer;
+    accent-color: #4CAF50; flex-shrink: 0;
+    opacity: 0.5;
+  }
+  .time-entry .te-invoice:checked { opacity: 1; }
+  .time-entry.invoiced .te-client,
+  .time-entry.invoiced .te-time,
+  .time-entry.invoiced .te-hours {
+    opacity: 0.35;
+  }
+  .add-time-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .add-time-row input, .add-time-row select {
+    background: #0a1628;
+    border: 1px solid #0f3460;
+    color: #e0e0e0;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .add-time-row input:focus, .add-time-row select:focus {
+    outline: none;
+    border-color: #e94560;
+  }
+  .add-time-row .time-input { width: 70px; }
+  .add-time-row select { flex: 1; min-width: 0; }
+  .add-time-row button {
+    background: #e94560;
+    border: none;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .add-time-row button:hover { background: #c73a52; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 12px;
+    padding: 24px;
+    width: 460px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 16px; color: #fff; }
+  .modal label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+    margin-top: 12px;
+    margin-bottom: 4px;
+  }
+  .modal input, .modal textarea, .modal select {
+    width: 100%;
+    background: #0a1628;
+    border: 1px solid #0f3460;
+    color: #e0e0e0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .modal select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+    cursor: pointer;
+  }
+  .modal select option {
+    background: #0a1628;
+    color: #e0e0e0;
+  }
+  .modal textarea { min-height: 60px; resize: vertical; }
+  .modal input:focus, .modal textarea:focus, .modal select:focus { outline: none; border-color: #e94560; }
+  .modal .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: flex-end;
+  }
+  .modal .btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .modal .btn-primary { background: #e94560; color: #fff; }
+  .modal .btn-primary:hover { background: #c73a52; }
+  .modal .btn-cancel { background: #0f3460; color: #ccc; }
+  .modal .btn-cancel:hover { background: #1a4a8a; }
+  .modal .btn-danger { background: transparent; color: #e94560; border: 1px solid #e94560; margin-right: auto; }
+  .modal .btn-danger:hover { background: rgba(233,69,96,0.1); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="projects-area" id="projectsArea"></div>
+  <div class="time-column" id="timeColumn"></div>
+</div>
+
+<div class="modal-overlay hidden" id="modalOverlay">
+  <div class="modal" id="modal"></div>
+</div>
+
+<script>
+// ── Data Layer ──
+const defaults = { cards: [], timeEntries: [], clients: [] };
+let data = defaults;
+
+async function loadData() {
+  try {
+    const res = await fetch('/api/data');
+    const json = await res.json();
+    return { ...defaults, ...json };
+  } catch {
+    // Fall back to localStorage if server isn't running
+    try {
+      const raw = localStorage.getItem('project_tracker');
+      return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+    } catch { return defaults; }
+  }
+}
+
+function saveData(data) {
+  fetch('/api/data', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).catch(() => {
+    // Fall back to localStorage if server isn't running
+    localStorage.setItem('project_tracker', JSON.stringify(data));
+  });
+}
+
+// ── Utilities ──
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+function parseTime(str) {
+  str = str.trim().toLowerCase().replace(/\s+/g, '');
+  const m = str.match(/^(\d{1,2})(?::?(\d{2}))?\s*(a|am|p|pm)?$/);
+  if (!m) return null;
+  let h = parseInt(m[1]);
+  const min = m[2] ? parseInt(m[2]) : 0;
+  const period = m[3];
+  if (period === 'p' || period === 'pm') { if (h < 12) h += 12; }
+  if (period === 'a' || period === 'am') { if (h === 12) h = 0; }
+  return h + min / 60;
+}
+
+function calcHours(start, end) {
+  const s = parseTime(start);
+  const e = parseTime(end);
+  if (s === null || e === null || e <= s) return 0;
+  return Math.round((e - s) * 100) / 100;
+}
+
+function formatHours(h) {
+  if (h === 0) return '0h';
+  const hrs = Math.floor(h);
+  const mins = Math.round((h - hrs) * 60);
+  if (mins === 0) return hrs + 'h';
+  if (hrs === 0) return mins + 'm';
+  return hrs + 'h ' + mins + 'm';
+}
+
+function dateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function dayLabel(dateString) {
+  const d = new Date(dateString + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function getMonday(d) {
+  const dt = new Date(d);
+  const day = dt.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  dt.setDate(dt.getDate() + diff);
+  return dt;
+}
+
+function jiraUrl(ticket) {
+  ticket = ticket.trim();
+  if (!ticket) return null;
+  if (ticket.startsWith('http')) return ticket;
+  // Try to detect the Jira prefix
+  const m = ticket.match(/^([A-Z]+-\d+)$/i);
+  if (m) return null; // return null if we can't determine the base URL
+  return null;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+// ── Client list ──
+function getClients() {
+  return (data.clients || []).slice().sort();
+}
+
+function addClient(name) {
+  name = name.trim();
+  if (!name) return;
+  if (!data.clients) data.clients = [];
+  if (!data.clients.includes(name)) {
+    data.clients.push(name);
+    saveData(data);
+  }
+}
+
+// ── Week navigation ──
+let currentWeekStart = getMonday(new Date());
+
+// ── Render: Projects ──
+function renderProjects() {
+  const area = document.getElementById('projectsArea');
+  area.innerHTML = '';
+
+  data.cards.forEach((card, index) => {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.draggable = true;
+    el.dataset.index = index;
+
+    let ticketHtml = '';
+    if (card.ticket) {
+      if (card.ticket.startsWith('http')) {
+        ticketHtml = `<a href="${escapeHtml(card.ticket)}" target="_blank">${escapeHtml(card.ticket)}</a>`;
+      } else {
+        ticketHtml = escapeHtml(card.ticket);
+      }
+    }
+
+    let followupHtml = '';
+    if (card.followup) {
+      const today = dateStr(new Date());
+      const isOverdue = card.followup < today;
+      followupHtml = `<div class="followup ${isOverdue ? 'overdue' : ''}">Follow up: ${dayLabel(card.followup)}</div>`;
+    }
+
+    el.innerHTML = `
+      <div class="card-actions">
+        <button onclick="editCard(${index})" title="Edit">✎</button>
+        <button onclick="archiveCard(${index})" title="Archive">✕</button>
+      </div>
+      <div class="project">${escapeHtml(card.project || '')}</div>
+      <div class="client">${escapeHtml(card.client || '')}</div>
+      <div class="ticket">${ticketHtml}</div>
+      ${card.description ? `<div class="field-label">Description</div><div class="description">${escapeHtml(card.description)}</div>` : ''}
+      ${card.notes ? `<div class="field-label">Notes</div><div class="notes">${escapeHtml(card.notes)}</div>` : ''}
+      ${followupHtml}
+    `;
+
+    // Drag events
+    el.addEventListener('dragstart', e => {
+      el.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', index);
+    });
+    el.addEventListener('dragend', () => el.classList.remove('dragging'));
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const from = parseInt(e.dataTransfer.getData('text/plain'));
+      const to = index;
+      if (from !== to) {
+        const [card] = data.cards.splice(from, 1);
+        data.cards.splice(to, 0, card);
+        saveData(data);
+        renderProjects();
+      }
+    });
+
+    area.appendChild(el);
+  });
+
+  // Add card button
+  const addBtn = document.createElement('div');
+  addBtn.className = 'add-card';
+  addBtn.textContent = '+';
+  addBtn.onclick = () => openCardModal();
+  area.appendChild(addBtn);
+}
+
+// ── Render: Time Column ──
+function renderTime() {
+  const col = document.getElementById('timeColumn');
+  col.innerHTML = '';
+
+  const weekEnd = new Date(currentWeekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+
+  // Filter entries for current week
+  const weekStart = dateStr(currentWeekStart);
+  const weekEndStr = dateStr(weekEnd);
+  const weekEntries = data.timeEntries.filter(e => e.date >= weekStart && e.date <= weekEndStr);
+  const totalHours = weekEntries.reduce((sum, e) => sum + (e.hours || 0), 0);
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'time-header';
+  header.innerHTML = `
+    <div class="week-label">This Week</div>
+    <div class="total-hours">${formatHours(totalHours)}</div>
+    <div class="total-label">total hours</div>
+    <div class="week-nav">
+      <button onclick="changeWeek(-1)">← Prev</button>
+      <span class="week-range">${dayLabel(weekStart)} – ${dayLabel(weekEndStr)}</span>
+      <button onclick="changeWeek(1)">Next →</button>
+    </div>
+  `;
+  col.appendChild(header);
+
+  // Day cards (Mon–Sun for current week)
+  const today = dateStr(new Date());
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(currentWeekStart);
+    d.setDate(d.getDate() + i);
+    const ds = dateStr(d);
+    const dayEntries = weekEntries.filter(e => e.date === ds);
+    const dayTotal = dayEntries.reduce((sum, e) => sum + (e.hours || 0), 0);
+    const isToday = ds === today;
+    const isCollapsed = !isToday && dayEntries.length === 0;
+
+    const dayCard = document.createElement('div');
+    dayCard.className = 'day-card' + (isCollapsed ? ' collapsed' : '');
+    dayCard.innerHTML = `
+      <div class="day-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        <span>${dayLabel(ds)}${isToday ? ' (today)' : ''}</span>
+        <span class="day-total">${dayTotal > 0 ? formatHours(dayTotal) : ''}</span>
+      </div>
+      <div class="day-body">
+        ${dayEntries.map(entry => `
+          <div class="time-entry ${entry.invoiced ? 'invoiced' : ''}">
+            <span class="te-client">${escapeHtml(entry.client)}</span>
+            <span class="te-time">${escapeHtml(entry.start)} – ${escapeHtml(entry.end)}</span>
+            <span class="te-hours">${formatHours(entry.hours)}</span>
+            <input type="checkbox" class="te-invoice" ${entry.invoiced ? 'checked' : ''} data-id="${entry.id}">
+            <button class="te-delete" onclick="deleteTimeEntry('${entry.id}')">✕</button>
+          </div>
+        `).join('')}
+        <div class="add-time-row">
+          <select id="tc-${ds}" class="time-client-select">
+            <option value="">Client</option>
+            ${getClients().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+          </select>
+          <input type="text" class="time-input" id="ts-${ds}" placeholder="9am">
+          <input type="text" class="time-input" id="te-${ds}" placeholder="11am">
+          <button onclick="addTimeEntry('${ds}')">+</button>
+        </div>
+      </div>
+    `;
+    col.appendChild(dayCard);
+  }
+  setupInvoiceCheckboxes();
+}
+
+// ── Actions ──
+function changeWeek(dir) {
+  currentWeekStart.setDate(currentWeekStart.getDate() + dir * 7);
+  renderTime();
+}
+
+function addTimeEntry(date) {
+  const clientEl = document.getElementById('tc-' + date);
+  const startEl = document.getElementById('ts-' + date);
+  const endEl = document.getElementById('te-' + date);
+  const client = clientEl.value;
+  const start = startEl.value.trim();
+  const end = endEl.value.trim();
+  if (!client) { clientEl.style.borderColor = '#e94560'; return; }
+  if (!start) { startEl.style.borderColor = '#e94560'; return; }
+  if (!end) { endEl.style.borderColor = '#e94560'; return; }
+  const hours = calcHours(start, end);
+  if (hours <= 0) { startEl.style.borderColor = '#e94560'; endEl.style.borderColor = '#e94560'; return; }
+  data.timeEntries.push({ id: uid(), date, client, start, end, hours });
+  saveData(data);
+  renderTime();
+}
+
+function deleteTimeEntry(id) {
+  data.timeEntries = data.timeEntries.filter(e => e.id !== id);
+  saveData(data);
+  renderTime();
+}
+
+function setupInvoiceCheckboxes() {
+  document.querySelectorAll('.te-invoice').forEach(cb => {
+    const id = cb.dataset.id;
+    const entry = data.timeEntries.find(e => e.id === id);
+    if (!entry) return;
+
+    cb.addEventListener('click', e => {
+      if (entry.invoiced) {
+        // Prevent single-click uncheck
+        e.preventDefault();
+      } else {
+        entry.invoiced = true;
+        saveData(data);
+        renderTime();
+      }
+    });
+
+    cb.addEventListener('dblclick', e => {
+      if (entry.invoiced) {
+        entry.invoiced = false;
+        saveData(data);
+        renderTime();
+      }
+    });
+  });
+}
+
+function archiveCard(index) {
+  if (confirm('Remove this card?')) {
+    data.cards.splice(index, 1);
+    saveData(data);
+    renderProjects();
+  }
+}
+
+// ── Card Modal ──
+function openCardModal(index) {
+  const isEdit = index !== undefined;
+  const card = isEdit ? data.cards[index] : {};
+  const overlay = document.getElementById('modalOverlay');
+  const modal = document.getElementById('modal');
+
+  modal.innerHTML = `
+    <h2>${isEdit ? 'Edit' : 'New'} Card</h2>
+    <label>Project</label>
+    <input type="text" id="m-project" value="${escapeHtml(card.project || '')}">
+    <label>Client</label>
+    <div style="display:flex;gap:6px;">
+      <select id="m-client" style="flex:1;">
+        <option value="">Select client...</option>
+        ${getClients().map(c => `<option value="${escapeHtml(c)}" ${card.client === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+        <option value="__new__">+ Add new client...</option>
+      </select>
+    </div>
+    <input type="text" id="m-client-new" placeholder="New client name" style="display:none;margin-top:6px;">
+    <label>Ticket (Jira # or URL)</label>
+    <input type="text" id="m-ticket" value="${escapeHtml(card.ticket || '')}">
+    <label>Description</label>
+    <textarea id="m-desc">${escapeHtml(card.description || '')}</textarea>
+    <label>Notes</label>
+    <textarea id="m-notes">${escapeHtml(card.notes || '')}</textarea>
+    <label>Follow-up Date</label>
+    <input type="date" id="m-followup" value="${card.followup || ''}">
+    <div class="modal-actions">
+      ${isEdit ? '<button class="btn btn-danger" onclick="deleteCard(' + index + ')">Delete</button>' : ''}
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCard(${isEdit ? index : -1})">Save</button>
+    </div>
+  `;
+
+  overlay.classList.remove('hidden');
+
+  // Handle "Add new client" selection
+  const clientSelect = document.getElementById('m-client');
+  const clientNewInput = document.getElementById('m-client-new');
+  clientSelect.addEventListener('change', () => {
+    if (clientSelect.value === '__new__') {
+      clientNewInput.style.display = 'block';
+      clientNewInput.focus();
+    } else {
+      clientNewInput.style.display = 'none';
+    }
+  });
+  clientSelect.focus();
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.add('hidden');
+}
+
+function saveCard(index) {
+  const clientSelect = document.getElementById('m-client');
+  let clientName = clientSelect.value;
+  if (clientName === '__new__') {
+    clientName = document.getElementById('m-client-new').value.trim();
+    if (clientName) addClient(clientName);
+  }
+  const card = {
+    client: clientName,
+    project: document.getElementById('m-project').value.trim(),
+    ticket: document.getElementById('m-ticket').value.trim(),
+    description: document.getElementById('m-desc').value.trim(),
+    notes: document.getElementById('m-notes').value.trim(),
+    followup: document.getElementById('m-followup').value,
+  };
+  if (!card.client && !card.project) return;
+  if (index === -1) {
+    data.cards.push(card);
+  } else {
+    data.cards[index] = card;
+  }
+  saveData(data);
+  closeModal();
+  renderProjects();
+  renderTime(); // refresh client dropdowns
+}
+
+function editCard(index) {
+  openCardModal(index);
+}
+
+function deleteCard(index) {
+  data.cards.splice(index, 1);
+  saveData(data);
+  closeModal();
+  renderProjects();
+}
+
+// Close modal on overlay click
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// Close modal on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ── Init ──
+(async () => {
+  data = await loadData();
+  renderProjects();
+  renderTime();
+})();
+</script>
+</body>
+</html>
