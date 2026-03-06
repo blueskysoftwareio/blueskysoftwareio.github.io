@@ -30,6 +30,12 @@
     gap: 4px;
     margin-bottom: 16px;
     flex-wrap: wrap;
+    align-items: center;
+  }
+  .client-tabs .yak-logo {
+    width: 28px;
+    height: 28px;
+    margin-right: 8px;
   }
   .client-tab {
     background: #0f3460;
@@ -567,17 +573,51 @@ function renderTabs() {
   const clients = getClients();
   tabsEl.innerHTML = '';
 
+  const logo = document.createElement('img');
+  logo.className = 'yak-logo';
+  logo.src = 'yak-favicon.png';
+  logo.alt = 'Yak';
+  tabsEl.appendChild(logo);
+
   const allTab = document.createElement('div');
   allTab.className = 'client-tab' + (activeTab === 'All' ? ' active' : '');
   allTab.textContent = 'All';
   allTab.onclick = () => { activeTab = 'All'; renderTabs(); renderProjects(); };
   tabsEl.appendChild(allTab);
 
-  clients.forEach(client => {
+  const orderedClients = data.clientOrder && data.clientOrder.length
+    ? data.clientOrder.filter(c => clients.includes(c)).concat(clients.filter(c => !data.clientOrder.includes(c)))
+    : clients;
+
+  orderedClients.forEach(client => {
     const tab = document.createElement('div');
     tab.className = 'client-tab' + (activeTab === client ? ' active' : '');
     tab.textContent = client;
+    tab.draggable = true;
+    tab.dataset.client = client;
     tab.onclick = () => { activeTab = client; renderTabs(); renderProjects(); };
+    tab.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', client);
+      tab.style.opacity = '0.4';
+    });
+    tab.addEventListener('dragend', () => { tab.style.opacity = '1'; });
+    tab.addEventListener('dragover', e => { e.preventDefault(); tab.style.borderColor = '#e94560'; });
+    tab.addEventListener('dragleave', () => { tab.style.borderColor = activeTab === client ? '#e94560' : '#0f3460'; });
+    tab.addEventListener('drop', e => {
+      e.preventDefault();
+      const from = e.dataTransfer.getData('text/plain');
+      const to = client;
+      if (from !== to) {
+        const order = [...orderedClients];
+        const fromIdx = order.indexOf(from);
+        const toIdx = order.indexOf(to);
+        order.splice(fromIdx, 1);
+        order.splice(toIdx, 0, from);
+        data.clientOrder = order;
+        saveData(data);
+        renderTabs();
+      }
+    });
     tabsEl.appendChild(tab);
   });
 }
@@ -874,14 +914,22 @@ function removeNote(i) {
   refreshNotesList();
 }
 
+function updateNoteText(i, text) {
+  if (currentEditNotes[i]) {
+    currentEditNotes[i].text = text.trim();
+  }
+}
+
 function refreshNotesList() {
   const list = document.getElementById('m-notes-list');
   if (!list) return;
   list.innerHTML = currentEditNotes.map((n, i) => `
-    <div style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid #0a1628;font-size:13px;">
-      <span style="color:#666;font-size:10px;white-space:nowrap;padding-top:2px;">${n.date || ''}</span>
-      <span style="color:#ccc;flex:1;">${escapeHtml(n.text)}</span>
-      <button class="btn" onclick="removeNote(${i})" style="background:none;color:#444;font-size:11px;padding:0 4px;min-width:auto;">✕</button>
+    <div style="display:flex;align-items:flex-start;gap:6px;padding:6px 0;border-bottom:1px solid #0a1628;font-size:13px;">
+      <span style="color:#666;font-size:10px;white-space:nowrap;padding-top:6px;">${n.date || ''}</span>
+      <input type="text" value="${escapeHtml(n.text)}" data-note-index="${i}"
+        style="flex:1;background:#0a1628;border:1px solid #0f3460;color:#ccc;padding:4px 6px;border-radius:4px;font-size:13px;font-family:inherit;"
+        onchange="updateNoteText(${i},this.value)">
+      <button class="btn" onclick="removeNote(${i})" style="background:none;color:#444;font-size:11px;padding:4px 4px;min-width:auto;">✕</button>
     </div>
   `).join('');
 }
@@ -916,14 +964,7 @@ function openCardModal(index) {
     <label>Description</label>
     <textarea id="m-desc">${escapeHtml(card.description || '')}</textarea>
     <label>Notes</label>
-    <div id="m-notes-list" style="max-height:150px;overflow-y:auto;margin-bottom:6px;">
-      ${(Array.isArray(card.notes) ? card.notes : (card.notes ? [{text: card.notes, date: ''}] : []))
-        .map((n, i) => `<div style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid #0a1628;font-size:13px;">
-          <span style="color:#666;font-size:10px;white-space:nowrap;padding-top:2px;">${n.date || ''}</span>
-          <span style="color:#ccc;flex:1;">${escapeHtml(n.text)}</span>
-          <button class="btn" onclick="removeNote(${i})" style="background:none;color:#444;font-size:11px;padding:0 4px;min-width:auto;">✕</button>
-        </div>`).join('')}
-    </div>
+    <div id="m-notes-list" style="max-height:150px;overflow-y:auto;margin-bottom:6px;"></div>
     <div style="display:flex;gap:6px;">
       <input type="text" id="m-note-input" placeholder="Add a note..." style="flex:1;">
       <button class="btn btn-primary" onclick="addNote()" style="padding:6px 12px;">+</button>
@@ -938,6 +979,7 @@ function openCardModal(index) {
   `;
 
   overlay.classList.remove('hidden');
+  refreshNotesList();
 
   // Handle "Add new client" selection
   const clientSelect = document.getElementById('m-client');
@@ -996,7 +1038,10 @@ function saveCard(index) {
   renderTime(); // refresh client dropdowns
 }
 
+let viewNotesIndex = -1;
+
 function viewNotes(index) {
+  viewNotesIndex = index;
   const card = data.cards[index];
   if (!card) return;
   const notes = Array.isArray(card.notes) ? card.notes : (card.notes ? [{ text: card.notes, date: '' }] : []);
@@ -1004,20 +1049,83 @@ function viewNotes(index) {
   const modal = document.getElementById('modal');
   modal.innerHTML = `
     <h2>Notes – ${escapeHtml(card.project || '')}</h2>
-    <div style="max-height:60vh;overflow-y:auto;">
-      ${notes.map(n => `
-        <div style="padding:10px 0;border-bottom:1px solid #0f3460;font-size:13px;color:#ccc;line-height:1.5;">
-          <span style="color:#e94560;font-size:10px;font-weight:600;margin-right:6px;">${n.date || ''}</span>
-          ${escapeHtml(n.text)}
+    <div id="view-notes-list" style="max-height:55vh;overflow-y:auto;">
+      ${notes.map((n, i) => `
+        <div style="padding:8px 0;border-bottom:1px solid #0f3460;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <span style="color:#e94560;font-size:10px;font-weight:600;">${n.date || ''}</span>
+            <button class="btn" onclick="removeViewNote(${i})" style="background:none;color:#444;font-size:11px;padding:0 4px;min-width:auto;">✕</button>
+          </div>
+          <textarea data-vn-index="${i}" style="width:100%;background:#0a1628;border:1px solid #0f3460;color:#ccc;padding:6px 8px;border-radius:4px;font-size:13px;font-family:inherit;line-height:1.5;resize:vertical;min-height:40px;">${escapeHtml(n.text)}</textarea>
         </div>
       `).join('')}
     </div>
+    <div style="display:flex;gap:6px;margin-top:10px;">
+      <input type="text" id="vn-note-input" placeholder="Add a note..." style="flex:1;background:#0a1628;border:1px solid #0f3460;color:#e0e0e0;padding:8px 10px;border-radius:6px;font-size:14px;font-family:inherit;">
+      <button class="btn btn-primary" onclick="addViewNote()" style="padding:6px 12px;">+</button>
+    </div>
     <div class="modal-actions">
-      <button class="btn btn-primary" onclick="closeModal(); editCard(${index})">Edit</button>
-      <button class="btn btn-cancel" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="saveViewNotes()">Save</button>
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
     </div>
   `;
   overlay.classList.remove('hidden');
+
+  // Auto-size textareas to content
+  modal.querySelectorAll('textarea[data-vn-index]').forEach(ta => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.max(40, ta.scrollHeight) + 'px';
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    });
+  });
+
+  // Enter to add note
+  const vnInput = document.getElementById('vn-note-input');
+  if (vnInput) {
+    vnInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); addViewNote(); }
+    });
+  }
+}
+
+function addViewNote() {
+  const input = document.getElementById('vn-note-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const card = data.cards[viewNotesIndex];
+  if (!card) return;
+  if (!Array.isArray(card.notes)) card.notes = card.notes ? [{ text: card.notes, date: '' }] : [];
+  const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  card.notes.unshift({ text, date: today });
+  saveData(data);
+  renderProjects();
+  viewNotes(viewNotesIndex);
+}
+
+function removeViewNote(i) {
+  const card = data.cards[viewNotesIndex];
+  if (!card || !Array.isArray(card.notes)) return;
+  card.notes.splice(i, 1);
+  saveData(data);
+  renderProjects();
+  viewNotes(viewNotesIndex);
+}
+
+function saveViewNotes() {
+  const card = data.cards[viewNotesIndex];
+  if (!card) return;
+  if (!Array.isArray(card.notes)) card.notes = [];
+  document.querySelectorAll('textarea[data-vn-index]').forEach(ta => {
+    const i = parseInt(ta.dataset.vnIndex);
+    if (card.notes[i]) {
+      card.notes[i].text = ta.value.trim();
+    }
+  });
+  saveData(data);
+  closeModal();
+  renderProjects();
 }
 
 function editCard(index) {
