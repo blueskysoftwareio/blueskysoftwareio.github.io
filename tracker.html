@@ -76,6 +76,43 @@
     line-height: 1.4;
     white-space: pre-wrap;
   }
+  .card .notes {
+    max-height: 120px;
+    overflow: hidden;
+    position: relative;
+    cursor: pointer;
+  }
+  .card .notes.overflowing::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    background: linear-gradient(transparent, #16213e);
+    pointer-events: none;
+  }
+  .card .notes-expand {
+    font-size: 11px;
+    color: #e94560;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .card .notes-expand:hover { text-decoration: underline; }
+  .card .note-item {
+    font-size: 13px;
+    color: #ccc;
+    line-height: 1.4;
+    padding: 8px 0;
+    border-bottom: 1px solid #0f3460;
+  }
+  .card .note-item:last-child { border-bottom: none; }
+  .card .note-date {
+    font-size: 10px;
+    color: #e94560;
+    margin-right: 6px;
+    font-weight: 600;
+  }
   .card .followup {
     font-size: 12px;
     color: #f0a500;
@@ -485,7 +522,10 @@ function renderProjects() {
       <div class="client">${escapeHtml(card.client || '')}</div>
       <div class="ticket">${ticketHtml}</div>
       ${card.description ? `<div class="field-label">Description</div><div class="description">${escapeHtml(card.description)}</div>` : ''}
-      ${card.notes ? `<div class="field-label">Notes</div><div class="notes">${escapeHtml(card.notes)}</div>` : ''}
+      ${card.notes && card.notes.length ? `<div class="field-label">Notes</div><div class="notes" onclick="viewNotes(${index})">${
+        (Array.isArray(card.notes) ? card.notes : [{text: card.notes, date: ''}])
+          .map(n => `<div class="note-item"><span class="note-date">${n.date || ''}</span> ${escapeHtml(n.text)}</div>`).join('')
+      }</div>${(Array.isArray(card.notes) ? card.notes : []).length > 3 ? `<div class="notes-expand" onclick="viewNotes(${index})">View all ${card.notes.length} notes</div>` : ''}` : ''}
       ${followupHtml}
     `;
 
@@ -520,6 +560,13 @@ function renderProjects() {
   addBtn.textContent = '+';
   addBtn.onclick = () => openCardModal();
   area.appendChild(addBtn);
+
+  // Add fade only to notes that actually overflow
+  area.querySelectorAll('.notes').forEach(el => {
+    if (el.scrollHeight > el.clientHeight) {
+      el.classList.add('overflowing');
+    }
+  });
 }
 
 // ── Render: Time Column ──
@@ -660,16 +707,53 @@ function archiveCard(index) {
 }
 
 // ── Card Modal ──
+let currentEditNotes = [];
+let currentEditIndex = -1;
+let modalInitialized = false;
+
+function addNote() {
+  const input = document.getElementById('m-note-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  currentEditNotes.unshift({ text, date: today });
+  input.value = '';
+  refreshNotesList();
+}
+
+function removeNote(i) {
+  currentEditNotes.splice(i, 1);
+  refreshNotesList();
+}
+
+function refreshNotesList() {
+  const list = document.getElementById('m-notes-list');
+  if (!list) return;
+  list.innerHTML = currentEditNotes.map((n, i) => `
+    <div style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid #0a1628;font-size:13px;">
+      <span style="color:#666;font-size:10px;white-space:nowrap;padding-top:2px;">${n.date || ''}</span>
+      <span style="color:#ccc;flex:1;">${escapeHtml(n.text)}</span>
+      <button class="btn" onclick="removeNote(${i})" style="background:none;color:#444;font-size:11px;padding:0 4px;min-width:auto;">✕</button>
+    </div>
+  `).join('');
+}
+
 function openCardModal(index) {
   const isEdit = index !== undefined;
   const card = isEdit ? data.cards[index] : {};
+  currentEditIndex = isEdit ? index : -1;
+  if (!modalInitialized) {
+    const raw = card.notes || [];
+    currentEditNotes = Array.isArray(raw) ? [...raw] : (raw ? [{ text: raw, date: '' }] : []);
+    modalInitialized = true;
+  }
   const overlay = document.getElementById('modalOverlay');
   const modal = document.getElementById('modal');
 
   modal.innerHTML = `
     <h2>${isEdit ? 'Edit' : 'New'} Card</h2>
     <label>Project</label>
-    <input type="text" id="m-project" value="${escapeHtml(card.project || '')}">
+    <input type="text" id="m-project" value="${escapeHtml(card.project || '')}" autocomplete="off">
     <label>Client</label>
     <div style="display:flex;gap:6px;">
       <select id="m-client" style="flex:1;">
@@ -684,7 +768,18 @@ function openCardModal(index) {
     <label>Description</label>
     <textarea id="m-desc">${escapeHtml(card.description || '')}</textarea>
     <label>Notes</label>
-    <textarea id="m-notes">${escapeHtml(card.notes || '')}</textarea>
+    <div id="m-notes-list" style="max-height:150px;overflow-y:auto;margin-bottom:6px;">
+      ${(Array.isArray(card.notes) ? card.notes : (card.notes ? [{text: card.notes, date: ''}] : []))
+        .map((n, i) => `<div style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid #0a1628;font-size:13px;">
+          <span style="color:#666;font-size:10px;white-space:nowrap;padding-top:2px;">${n.date || ''}</span>
+          <span style="color:#ccc;flex:1;">${escapeHtml(n.text)}</span>
+          <button class="btn" onclick="removeNote(${i})" style="background:none;color:#444;font-size:11px;padding:0 4px;min-width:auto;">✕</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:6px;">
+      <input type="text" id="m-note-input" placeholder="Add a note..." style="flex:1;">
+      <button class="btn btn-primary" onclick="addNote()" style="padding:6px 12px;">+</button>
+    </div>
     <label>Follow-up Date</label>
     <input type="date" id="m-followup" value="${card.followup || ''}">
     <div class="modal-actions">
@@ -708,10 +803,21 @@ function openCardModal(index) {
     }
   });
   clientSelect.focus();
+
+  // Enter to add note
+  const noteInput = document.getElementById('m-note-input');
+  if (noteInput) {
+    noteInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); addNote(); }
+    });
+  }
 }
 
 function closeModal() {
   document.getElementById('modalOverlay').classList.add('hidden');
+  currentEditNotes = [];
+  currentEditIndex = -1;
+  modalInitialized = false;
 }
 
 function saveCard(index) {
@@ -726,7 +832,7 @@ function saveCard(index) {
     project: document.getElementById('m-project').value.trim(),
     ticket: document.getElementById('m-ticket').value.trim(),
     description: document.getElementById('m-desc').value.trim(),
-    notes: document.getElementById('m-notes').value.trim(),
+    notes: (currentEditNotes || []).map(n => ({ text: n.text, date: n.date })),
     followup: document.getElementById('m-followup').value,
   };
   if (!card.client && !card.project) return;
@@ -739,6 +845,30 @@ function saveCard(index) {
   closeModal();
   renderProjects();
   renderTime(); // refresh client dropdowns
+}
+
+function viewNotes(index) {
+  const card = data.cards[index];
+  if (!card) return;
+  const notes = Array.isArray(card.notes) ? card.notes : (card.notes ? [{ text: card.notes, date: '' }] : []);
+  const overlay = document.getElementById('modalOverlay');
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <h2>Notes – ${escapeHtml(card.project || '')}</h2>
+    <div style="max-height:60vh;overflow-y:auto;">
+      ${notes.map(n => `
+        <div style="padding:10px 0;border-bottom:1px solid #0f3460;font-size:13px;color:#ccc;line-height:1.5;">
+          <span style="color:#e94560;font-size:10px;font-weight:600;margin-right:6px;">${n.date || ''}</span>
+          ${escapeHtml(n.text)}
+        </div>
+      `).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal(); editCard(${index})">Edit</button>
+      <button class="btn btn-cancel" onclick="closeModal()">Close</button>
+    </div>
+  `;
+  overlay.classList.remove('hidden');
 }
 
 function editCard(index) {
