@@ -211,6 +211,18 @@
     flex-direction: column;
     gap: 16px;
   }
+  .time-filter {
+    background: #0a1628;
+    border: 1px solid #0f3460;
+    color: #e0e0e0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    width: 100%;
+  }
+  .time-filter:focus { outline: none; border-color: #e94560; }
+  .time-filter::placeholder { color: #444; }
   .time-header {
     background: #16213e;
     border: 1px solid #0f3460;
@@ -577,6 +589,7 @@ function addClient(name) {
 // ── Tab & search state ──
 let activeTab = 'All';
 let searchQuery = '';
+let timeFilter = '';
 
 // ── Week navigation ──
 let currentWeekStart = getMonday(new Date());
@@ -753,14 +766,17 @@ function renderTime() {
   // Filter entries for current week
   const weekStart = dateStr(currentWeekStart);
   const weekEndStr = dateStr(weekEnd);
-  const weekEntries = data.timeEntries.filter(e => e.date >= weekStart && e.date <= weekEndStr);
+  const tf = timeFilter.toLowerCase();
+  const weekEntries = data.timeEntries
+    .filter(e => e.date >= weekStart && e.date <= weekEndStr)
+    .filter(e => !tf || (e.client || '').toLowerCase().includes(tf));
   const totalHours = weekEntries.reduce((sum, e) => sum + (e.hours || 0), 0);
 
   // Header
   const header = document.createElement('div');
   header.className = 'time-header';
   header.innerHTML = `
-    <div class="week-label">This Week</div>
+    <div class="week-label">${timeFilter ? escapeHtml(timeFilter) : 'This Week'}</div>
     <div class="total-hours">${formatHours(totalHours)}</div>
     <div class="total-label">total hours</div>
     <div class="week-nav">
@@ -770,6 +786,27 @@ function renderTime() {
     </div>
   `;
   col.appendChild(header);
+
+  // Filter input
+  const filterDiv = document.createElement('div');
+  filterDiv.style.marginBottom = '12px';
+  const filterInput = document.createElement('input');
+  filterInput.type = 'text';
+  filterInput.className = 'time-filter';
+  filterInput.placeholder = 'Filter by client...';
+  filterInput.autocomplete = 'off';
+  filterInput.value = timeFilter;
+  filterInput.addEventListener('input', e => {
+    timeFilter = e.target.value;
+    renderTime();
+    const newFilter = document.querySelector('.time-filter');
+    if (newFilter) {
+      newFilter.focus();
+      newFilter.selectionStart = newFilter.selectionEnd = newFilter.value.length;
+    }
+  });
+  filterDiv.appendChild(filterInput);
+  col.appendChild(filterDiv);
 
   // Day cards (Mon–Sun for current week)
   const today = dateStr(new Date());
