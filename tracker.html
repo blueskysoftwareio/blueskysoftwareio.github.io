@@ -25,6 +25,19 @@
     display: flex;
     flex-direction: column;
   }
+  .tab-search {
+    margin-left: auto;
+    background: #0a1628;
+    border: 1px solid #0f3460;
+    color: #e0e0e0;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    width: 160px;
+  }
+  .tab-search:focus { outline: none; border-color: #e94560; }
+  .tab-search::placeholder { color: #444; }
   .client-tabs {
     display: flex;
     gap: 4px;
@@ -561,8 +574,9 @@ function addClient(name) {
   }
 }
 
-// ── Tab state ──
+// ── Tab & search state ──
 let activeTab = 'All';
+let searchQuery = '';
 
 // ── Week navigation ──
 let currentWeekStart = getMonday(new Date());
@@ -620,15 +634,30 @@ function renderTabs() {
     });
     tabsEl.appendChild(tab);
   });
+
+  const search = document.createElement('input');
+  search.type = 'text';
+  search.className = 'tab-search';
+  search.id = 'searchInput';
+  search.placeholder = 'Search projects...';
+  search.autocomplete = 'off';
+  search.value = searchQuery;
+  search.addEventListener('input', e => {
+    searchQuery = e.target.value;
+    renderProjects();
+  });
+  tabsEl.appendChild(search);
 }
 
 function renderProjects() {
   const area = document.getElementById('projectsArea');
   area.innerHTML = '';
 
-  const filteredCards = activeTab === 'All'
-    ? data.cards.map((card, index) => ({ card, index }))
-    : data.cards.map((card, index) => ({ card, index })).filter(({ card }) => card.client === activeTab);
+  const q = searchQuery.toLowerCase();
+  const filteredCards = data.cards
+    .map((card, index) => ({ card, index }))
+    .filter(({ card }) => activeTab === 'All' || card.client === activeTab)
+    .filter(({ card }) => !q || (card.project || '').toLowerCase().includes(q));
 
   filteredCards.forEach(({ card, index }) => {
     const el = document.createElement('div');
@@ -1163,6 +1192,7 @@ document.addEventListener('keydown', e => {
   renderTabs();
   renderProjects();
   renderTime();
+
 })();
 </script>
 </body>
