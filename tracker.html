@@ -455,6 +455,7 @@
     font-family: inherit;
   }
   #m-tasks-list input, #m-tasks-list button { width: auto; }
+  .modal input[type="checkbox"] { width: auto; }
   .modal select {
     appearance: none;
     -webkit-appearance: none;
@@ -820,6 +821,11 @@ function renderProjects() {
       }</div>${(Array.isArray(card.notes) ? card.notes : []).length > 3 ? `<div class="notes-expand" onclick="viewNotes(${index})">View all ${card.notes.length} notes</div>` : ''}` : ''}
       ${followupHtml}
     `;
+
+    el.addEventListener('click', e => {
+      if (e.target.closest('a, button, input[type="checkbox"], .notes, .notes-expand, .tasks-toggle')) return;
+      viewCard(index);
+    });
 
     // Drag events
     el.addEventListener('dragstart', e => {
@@ -1472,6 +1478,196 @@ function saveViewNotes() {
   apiUpdateCard(card.id, card);
   closeModal();
   renderProjects();
+}
+
+function viewCard(index) {
+  const card = data.cards[index];
+  if (!card) return;
+  const overlay = document.getElementById('modalOverlay');
+  const modal = document.getElementById('modal');
+  const today = dateStr(new Date());
+
+  const notes = Array.isArray(card.notes) ? card.notes : (card.notes ? [{ text: card.notes, date: '' }] : []);
+  const tasks = card.tasks || [];
+  const openTasks = tasks.filter(t => !t.done);
+  const doneTasks = tasks.filter(t => t.done);
+
+  let ticketHtml = '';
+  if (card.ticket) {
+    if (card.ticket.startsWith('http')) {
+      ticketHtml = `<a href="${escapeHtml(card.ticket)}" target="_blank" style="color:#5a9fd4;text-decoration:none;">${escapeHtml(card.ticket)}</a>`;
+    } else {
+      ticketHtml = escapeHtml(card.ticket);
+    }
+  }
+
+  let followupHtml = '';
+  if (card.followup) {
+    const isOverdue = card.followup < today;
+    followupHtml = `<div style="color:${isOverdue ? '#e94560' : '#f0a500'};font-size:13px;margin-top:12px;">Follow up: ${dayLabel(card.followup)}</div>`;
+  }
+
+  // Build HTML in parts to avoid template literal issues with user content
+  const m = document.createElement('div');
+
+  // Header
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;';
+  const headerLeft = document.createElement('div');
+  const h2 = document.createElement('h2');
+  h2.style.cssText = 'margin-bottom:4px;color:#e94560;';
+  h2.textContent = card.project || '';
+  const clientDiv = document.createElement('div');
+  clientDiv.style.cssText = 'font-size:13px;color:#888;';
+  clientDiv.textContent = card.client || '';
+  headerLeft.appendChild(h2);
+  headerLeft.appendChild(clientDiv);
+  const editBtn = document.createElement('button');
+  editBtn.className = 'btn btn-primary';
+  editBtn.style.cssText = 'padding:6px 14px;font-size:12px;';
+  editBtn.textContent = '✎ Edit';
+  editBtn.onclick = () => { closeModal(); editCard(index); };
+  header.appendChild(headerLeft);
+  header.appendChild(editBtn);
+  m.appendChild(header);
+
+  // Ticket
+  if (card.ticket) {
+    const ticketDiv = document.createElement('div');
+    ticketDiv.style.cssText = 'font-size:12px;color:#888;margin-bottom:12px;';
+    if (card.ticket.startsWith('http')) {
+      const a = document.createElement('a');
+      a.href = card.ticket;
+      a.target = '_blank';
+      a.style.cssText = 'color:#5a9fd4;text-decoration:none;';
+      a.textContent = card.ticket;
+      ticketDiv.appendChild(a);
+    } else {
+      ticketDiv.textContent = card.ticket;
+    }
+    m.appendChild(ticketDiv);
+  }
+
+  // Tasks
+  if (openTasks.length || doneTasks.length) {
+    const taskLabel = document.createElement('div');
+    taskLabel.className = 'field-label';
+    taskLabel.style.color = '#666';
+    taskLabel.textContent = 'Tasks' + (openTasks.length ? ` (${openTasks.length})` : '');
+    m.appendChild(taskLabel);
+
+    openTasks.forEach(t => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:13px;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.style.cssText = 'accent-color:#4CAF50;margin-top:2px;cursor:pointer;width:auto;flex-shrink:0;';
+      cb.onchange = () => { toggleTask(card.id, t.id, true); viewCard(index); };
+      const span = document.createElement('span');
+      span.style.cssText = 'color:#ccc;flex:1;';
+      span.textContent = t.text;
+      row.appendChild(cb);
+      row.appendChild(span);
+      if (t.dueDate) {
+        const due = document.createElement('span');
+        due.style.cssText = 'font-size:10px;white-space:nowrap;color:' + (t.dueDate < today ? '#e94560' : '#f0a500') + ';';
+        due.textContent = dayLabel(t.dueDate);
+        row.appendChild(due);
+      }
+      m.appendChild(row);
+    });
+
+    if (doneTasks.length) {
+      const toggle = document.createElement('div');
+      toggle.style.cssText = 'font-size:11px;color:#666;cursor:pointer;padding:6px 0;';
+      toggle.textContent = 'See ' + doneTasks.length + ' completed';
+      const doneContainer = document.createElement('div');
+      doneContainer.style.display = 'none';
+      toggle.onclick = () => {
+        doneContainer.style.display = doneContainer.style.display === 'none' ? 'block' : 'none';
+        toggle.textContent = doneContainer.style.display === 'none' ? 'See ' + doneTasks.length + ' completed' : 'Hide completed';
+      };
+      doneTasks.forEach(t => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:13px;opacity:0.4;';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = true;
+        cb.style.cssText = 'accent-color:#4CAF50;margin-top:2px;cursor:pointer;width:auto;flex-shrink:0;';
+        cb.onchange = () => { toggleTask(card.id, t.id, false); viewCard(index); };
+        const span = document.createElement('span');
+        span.style.cssText = 'color:#ccc;flex:1;text-decoration:line-through;';
+        span.textContent = t.text;
+        row.appendChild(cb);
+        row.appendChild(span);
+        doneContainer.appendChild(row);
+      });
+      m.appendChild(toggle);
+      m.appendChild(doneContainer);
+    }
+  }
+
+  // Description
+  if (card.description) {
+    const descLabel = document.createElement('div');
+    descLabel.className = 'field-label';
+    descLabel.style.color = '#666';
+    descLabel.textContent = 'Description';
+    const descDiv = document.createElement('div');
+    descDiv.style.cssText = 'font-size:13px;color:#ccc;line-height:1.6;white-space:pre-wrap;padding:8px 0;';
+    descDiv.textContent = card.description;
+    m.appendChild(descLabel);
+    m.appendChild(descDiv);
+  }
+
+  // Notes
+  if (notes.length) {
+    const notesLabel = document.createElement('div');
+    notesLabel.className = 'field-label';
+    notesLabel.style.color = '#666';
+    notesLabel.textContent = 'Notes';
+    m.appendChild(notesLabel);
+    const notesContainer = document.createElement('div');
+    notesContainer.style.cssText = 'max-height:300px;overflow-y:auto;';
+    notes.forEach(n => {
+      const noteDiv = document.createElement('div');
+      noteDiv.style.cssText = 'padding:8px 0;border-bottom:1px solid #0f3460;font-size:13px;line-height:1.5;';
+      const dateSpan = document.createElement('span');
+      dateSpan.style.cssText = 'color:#e94560;font-size:10px;font-weight:600;margin-right:6px;';
+      dateSpan.textContent = n.date || '';
+      const textSpan = document.createElement('span');
+      textSpan.style.cssText = 'color:#ccc;white-space:pre-wrap;word-break:break-word;';
+      textSpan.textContent = n.text;
+      noteDiv.appendChild(dateSpan);
+      noteDiv.appendChild(textSpan);
+      notesContainer.appendChild(noteDiv);
+    });
+    m.appendChild(notesContainer);
+  }
+
+  // Follow-up
+  if (card.followup) {
+    const isOverdue = card.followup < today;
+    const fuDiv = document.createElement('div');
+    fuDiv.style.cssText = 'font-size:13px;margin-top:12px;color:' + (isOverdue ? '#e94560' : '#f0a500') + ';';
+    fuDiv.textContent = 'Follow up: ' + dayLabel(card.followup);
+    m.appendChild(fuDiv);
+  }
+
+  // Actions
+  const actions = document.createElement('div');
+  actions.className = 'modal-actions';
+  actions.style.marginTop = '16px';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn btn-cancel';
+  closeBtn.textContent = 'Close';
+  closeBtn.onclick = closeModal;
+  actions.appendChild(closeBtn);
+  m.appendChild(actions);
+
+  modal.innerHTML = '';
+  modal.appendChild(m);
+  overlay.classList.remove('hidden');
 }
 
 function editCard(index) {
