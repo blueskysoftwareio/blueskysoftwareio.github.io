@@ -1295,8 +1295,8 @@ function openCardModal(index) {
     <label>Notes</label>
     <div id="m-notes-list" style="max-height:150px;overflow-y:auto;margin-bottom:6px;"></div>
     <div style="display:flex;gap:6px;">
-      <input type="text" id="m-note-input" placeholder="Add a note..." style="flex:1;">
-      <button class="btn btn-primary" onclick="addNote()" style="padding:6px 12px;">+</button>
+      <textarea id="m-note-input" placeholder="Add a note... (Shift+Enter for new line)" rows="1" style="flex:1;resize:none;overflow:hidden;"></textarea>
+      <button class="btn btn-primary" onclick="addNote()" style="padding:6px 12px;align-self:flex-end;">+</button>
     </div>
     <label>Follow-up Date</label>
     <input type="date" id="m-followup" value="${card.followup || ''}">
@@ -1324,20 +1324,26 @@ function openCardModal(index) {
   });
   clientSelect.focus();
 
-  // Enter to add task
+  // Enter or blur to add task
   const taskInput = document.getElementById('m-task-input');
   if (taskInput) {
     taskInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); addTask(); }
     });
+    taskInput.addEventListener('blur', () => { if (taskInput.value.trim()) addTask(); });
   }
 
-  // Enter to add note
+  // Enter (no shift) or blur to add note; Shift+Enter for new line
   const noteInput = document.getElementById('m-note-input');
   if (noteInput) {
     noteInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); addNote(); }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addNote(); }
     });
+    noteInput.addEventListener('input', () => {
+      noteInput.style.height = 'auto';
+      noteInput.style.height = noteInput.scrollHeight + 'px';
+    });
+    noteInput.addEventListener('blur', () => { if (noteInput.value.trim()) addNote(); });
   }
 }
 
@@ -1405,7 +1411,7 @@ function viewNotes(index) {
       `).join('')}
     </div>
     <div style="display:flex;gap:6px;margin-top:10px;">
-      <input type="text" id="vn-note-input" placeholder="Add a note..." style="flex:1;background:#0a1628;border:1px solid #0f3460;color:#e0e0e0;padding:8px 10px;border-radius:6px;font-size:14px;font-family:inherit;">
+      <textarea id="vn-note-input" placeholder="Add a note... (Shift+Enter for new line)" rows="1" style="flex:1;background:#0a1628;border:1px solid #0f3460;color:#e0e0e0;padding:8px 10px;border-radius:6px;font-size:14px;font-family:inherit;resize:none;overflow:hidden;">
       <button class="btn btn-primary" onclick="addViewNote()" style="padding:6px 12px;">+</button>
     </div>
     <div class="modal-actions">
@@ -1432,12 +1438,17 @@ function viewNotes(index) {
     });
   });
 
-  // Enter to add note
+  // Enter (no shift) or blur to add note; Shift+Enter for new line
   const vnInput = document.getElementById('vn-note-input');
   if (vnInput) {
     vnInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); addViewNote(); }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addViewNote(); }
     });
+    vnInput.addEventListener('input', () => {
+      vnInput.style.height = 'auto';
+      vnInput.style.height = vnInput.scrollHeight + 'px';
+    });
+    vnInput.addEventListener('blur', () => { if (vnInput.value.trim()) addViewNote(); });
   }
 }
 
