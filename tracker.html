@@ -26,40 +26,53 @@
     flex-direction: column;
   }
   .tab-search {
-    margin-left: auto;
     background: #0a1628;
     border: 1px solid #0f3460;
     color: #e0e0e0;
-    padding: 5px 10px;
+    padding: 6px 10px;
     border-radius: 6px;
     font-size: 12px;
     font-family: inherit;
-    width: 160px;
+    width: 100%;
+    margin-bottom: 12px;
   }
   .tab-search:focus { outline: none; border-color: #e94560; }
   .tab-search::placeholder { color: #444; }
   .client-tabs {
     display: flex;
     gap: 4px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
+    margin-bottom: 8px;
     align-items: center;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #0f3460 transparent;
+    padding-bottom: 4px;
   }
+  .client-tabs::-webkit-scrollbar { height: 4px; }
+  .client-tabs::-webkit-scrollbar-track { background: transparent; }
+  .client-tabs::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
   .client-tabs .yak-logo {
     width: 28px;
     height: 28px;
     margin-right: 8px;
+    flex-shrink: 0;
   }
   .client-tab {
     background: #0f3460;
     border: 1px solid #0f3460;
     color: #888;
-    padding: 6px 16px;
+    padding: 6px 12px;
     border-radius: 6px 6px 0 0;
     cursor: pointer;
     font-size: 12px;
     font-weight: 600;
     transition: background 0.2s, color 0.2s;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
   }
   .client-tab:hover { color: #ccc; }
   .client-tab.active {
@@ -102,6 +115,28 @@
     color: #aaa;
     margin-bottom: 4px;
   }
+  .card .status-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-bottom: 6px;
+  }
+  .status-badge.in-progress { background: rgba(90,159,212,0.15); color: #5a9fd4; }
+  .status-badge.qa { background: rgba(240,165,0,0.15); color: #f0a500; }
+  .status-badge.complete { background: rgba(76,175,80,0.15); color: #4CAF50; }
+  .show-completed-toggle {
+    font-size: 12px;
+    color: #666;
+    cursor: pointer;
+    padding: 8px 0;
+    text-align: center;
+    width: calc(50% - 8px);
+  }
+  .show-completed-toggle:hover { color: #e94560; }
   .card .ticket {
     font-size: 12px;
     color: #888;
@@ -365,7 +400,8 @@
     content: attr(data-placeholder);
     color: #444;
   }
-  .time-entry .te-client { color: #e94560; font-weight: 600; flex: 1; cursor: pointer; }
+  .time-entry .te-client { color: #e94560; font-weight: 600; flex: 1; cursor: pointer; min-width: 0; }
+  .time-entry .te-project { font-size: 11px; color: #888; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .time-entry .te-time { color: #888; font-size: 12px; cursor: pointer; }
   .time-entry .te-hours { color: #fff; font-weight: 600; min-width: 40px; text-align: right; }
   .time-entry .te-delete {
@@ -504,6 +540,7 @@
 <div class="app">
   <div class="projects-container">
     <div class="client-tabs" id="clientTabs"></div>
+    <div id="searchBar"></div>
     <div class="projects-area" id="projectsArea"></div>
   </div>
   <div class="time-column" id="timeColumn"></div>
@@ -685,6 +722,7 @@ function addClient(name) {
 let activeTab = 'All';
 let searchQuery = '';
 let timeFilter = '';
+let showCompleted = false;
 
 // ── Week navigation ──
 let currentWeekStart = getMonday(new Date());
@@ -743,6 +781,9 @@ function renderTabs() {
     tabsEl.appendChild(tab);
   });
 
+  // Search bar below tabs
+  const searchBar = document.getElementById('searchBar');
+  searchBar.innerHTML = '';
   const search = document.createElement('input');
   search.type = 'text';
   search.className = 'tab-search';
@@ -754,7 +795,7 @@ function renderTabs() {
     searchQuery = e.target.value;
     renderProjects();
   });
-  tabsEl.appendChild(search);
+  searchBar.appendChild(search);
 }
 
 function renderProjects() {
@@ -762,10 +803,12 @@ function renderProjects() {
   area.innerHTML = '';
 
   const q = searchQuery.toLowerCase();
-  const filteredCards = data.cards
+  const allFiltered = data.cards
     .map((card, index) => ({ card, index }))
     .filter(({ card }) => activeTab === 'All' || card.client === activeTab)
     .filter(({ card }) => !q || (card.project || '').toLowerCase().includes(q));
+  const completedCount = allFiltered.filter(({ card }) => card.status === 'Complete').length;
+  const filteredCards = allFiltered.filter(({ card }) => showCompleted || card.status !== 'Complete');
 
   filteredCards.forEach(({ card, index }) => {
     const el = document.createElement('div');
@@ -796,6 +839,7 @@ function renderProjects() {
       </div>
       <div class="project">${escapeHtml(card.project || '')}</div>
       <div class="client">${escapeHtml(card.client || '')}</div>
+      ${card.status ? `<div class="status-badge ${card.status === 'In Progress' ? 'in-progress' : card.status === 'QA' ? 'qa' : 'complete'}">${escapeHtml(card.status)}</div>` : ''}
       <div class="ticket">${ticketHtml}</div>
       ${card.tasks && card.tasks.length ? (() => {
         const open = card.tasks.filter(t => !t.done);
@@ -859,6 +903,15 @@ function renderProjects() {
   addBtn.onclick = () => openCardModal();
   area.appendChild(addBtn);
 
+  // Show/hide completed toggle
+  if (completedCount > 0) {
+    const toggle = document.createElement('div');
+    toggle.className = 'show-completed-toggle';
+    toggle.textContent = showCompleted ? 'Hide completed' : `Show ${completedCount} completed`;
+    toggle.onclick = () => { showCompleted = !showCompleted; renderProjects(); };
+    area.appendChild(toggle);
+  }
+
   // Add fade only to elements that actually overflow
   area.querySelectorAll('.notes').forEach(el => {
     if (el.scrollHeight > el.clientHeight) {
@@ -910,6 +963,7 @@ function renderTime() {
       <span class="week-range">${dayLabel(weekStart)} – ${dayLabel(weekEndStr)}</span>
       <button onclick="changeWeek(1)">Next →</button>
     </div>
+    <button onclick="runBackup()" style="margin-top:8px;background:none;border:1px solid #0f3460;color:#888;cursor:pointer;padding:4px 10px;border-radius:4px;font-size:11px;">Backup</button>
   `;
   col.appendChild(header);
 
@@ -956,7 +1010,7 @@ function renderTime() {
         ${dayEntries.map(entry => `
           <div class="time-entry ${entry.invoiced ? 'invoiced' : ''}">
             <div class="te-row">
-              <span class="te-client" data-id="${entry.id}" data-field="client" onclick="editTimeField(this)">${escapeHtml(entry.client)}</span>
+              <span class="te-client" data-id="${entry.id}" data-field="client" onclick="editTimeField(this)">${escapeHtml(entry.client)}${entry.project ? `<div class="te-project">${escapeHtml(entry.project)}</div>` : ''}</span>
               <span class="te-time" data-id="${entry.id}" onclick="editTimeFields(this, '${escapeHtml(entry.start)}', '${escapeHtml(entry.end)}')">${escapeHtml(entry.start)} – ${escapeHtml(entry.end)}</span>
               <span class="te-hours">${formatHours(entry.hours)}</span>
               <input type="checkbox" class="te-invoice" ${entry.invoiced ? 'checked' : ''} data-id="${entry.id}">
@@ -969,6 +1023,10 @@ function renderTime() {
           <select id="tc-${ds}" class="time-client-select">
             <option value="">Client</option>
             ${getClients().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+          </select>
+          <select id="tp-${ds}" class="time-project-select">
+            <option value="">Project</option>
+            ${data.cards.map(c => `<option value="${escapeHtml(c.project)}">${escapeHtml(c.project)}</option>`).join('')}
           </select>
           <input type="text" class="time-input" id="ts-${ds}" placeholder="09:00">
           <input type="text" class="time-input" id="te-${ds}" placeholder="17:00">
@@ -1005,6 +1063,19 @@ function renderTime() {
     });
   });
 
+  // Filter project dropdown when client changes
+  document.querySelectorAll('.time-client-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const ds = sel.id.replace('tc-', '');
+      const projSel = document.getElementById('tp-' + ds);
+      if (!projSel) return;
+      const client = sel.value;
+      const projects = client ? data.cards.filter(c => c.client === client || !c.client) : data.cards;
+      projSel.innerHTML = '<option value="">Project</option>' +
+        projects.map(c => `<option value="${escapeHtml(c.project)}">${escapeHtml(c.project)}</option>`).join('');
+    });
+  });
+
   // Auto-grow textareas + Enter to save (Shift+Enter for newline)
   document.querySelectorAll('.time-note-input').forEach(ta => {
     const ds = ta.id.replace('tn-', '');
@@ -1022,12 +1093,20 @@ function renderTime() {
 }
 
 // ── Actions ──
+async function runBackup() {
+  try {
+    const res = await api('POST', '/api/backup');
+    if (res.ok) alert('Backup saved: ' + res.file);
+    else alert('Backup failed');
+  } catch { alert('Backup failed — server unreachable'); }
+}
+
 function changeWeek(dir) {
   currentWeekStart.setDate(currentWeekStart.getDate() + dir * 7);
   renderTime();
 }
 
-function addTimeEntry(date) {
+async function addTimeEntry(date) {
   const clientEl = document.getElementById('tc-' + date);
   const startEl = document.getElementById('ts-' + date);
   const endEl = document.getElementById('te-' + date);
@@ -1039,16 +1118,18 @@ function addTimeEntry(date) {
   if (!end) { endEl.style.borderColor = '#e94560'; return; }
   const hours = calcHours(start, end);
   if (hours <= 0) { startEl.style.borderColor = '#e94560'; endEl.style.borderColor = '#e94560'; return; }
+  const projEl = document.getElementById('tp-' + date);
+  const project = projEl ? projEl.value : '';
   const noteEl = document.getElementById('tn-' + date);
   const note = noteEl ? noteEl.value.trim() : '';
-  const entry = { id: uid(), date, client, start: formatTime(start), end: formatTime(end), hours, note };
-  apiAddTimeEntry(entry);
+  const entry = { id: uid(), date, client, project, start: formatTime(start), end: formatTime(end), hours, note };
+  await apiAddTimeEntry(entry);
   renderTime();
 }
 
-function deleteTimeEntry(id) {
+async function deleteTimeEntry(id) {
   if (!confirm('Delete this time entry?')) return;
-  apiDeleteTimeEntry(id);
+  await apiDeleteTimeEntry(id);
   renderTime();
 }
 
@@ -1056,24 +1137,52 @@ function editTimeField(el) {
   const id = el.dataset.id;
   const entry = data.timeEntries.find(e => e.id === id);
   if (!entry) return;
-  const select = document.createElement('select');
-  select.style.cssText = 'background:#0a1628;border:1px solid #e94560;color:#e0e0e0;padding:2px 4px;border-radius:4px;font-size:12px;font-family:inherit;';
+  const wrapper = document.createElement('span');
+  wrapper.style.cssText = 'display:flex;gap:4px;flex:1;min-width:0;';
+  const selectStyle = 'background:#0a1628;border:1px solid #e94560;color:#e0e0e0;padding:2px 4px;border-radius:4px;font-size:11px;font-family:inherit;flex:1;min-width:0;max-width:50%;';
+
+  const clientSel = document.createElement('select');
+  clientSel.style.cssText = selectStyle;
   getClients().forEach(c => {
     const opt = document.createElement('option');
     opt.value = c; opt.textContent = c;
     if (c === entry.client) opt.selected = true;
-    select.appendChild(opt);
+    clientSel.appendChild(opt);
   });
-  el.replaceWith(select);
-  select.focus();
-  const save = () => {
-    const newClient = select.value;
-    entry.client = newClient;
-    apiUpdateTimeEntry(id, { client: newClient });
-    renderTime();
+
+  const projSel = document.createElement('select');
+  projSel.style.cssText = selectStyle;
+  const fillProjects = (client) => {
+    const projects = client
+      ? data.cards.filter(c => c.client === client || !c.client)
+      : data.cards;
+    // Ensure current project is always in the list
+    const projNames = projects.map(c => c.project);
+    if (entry.project && !projNames.includes(entry.project)) {
+      projNames.unshift(entry.project);
+    }
+    projSel.innerHTML = '<option value="">Project</option>' +
+      projNames.map(p => `<option value="${escapeHtml(p)}" ${p === entry.project ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('');
   };
-  select.addEventListener('change', save);
-  select.addEventListener('blur', save);
+  fillProjects(entry.client);
+  clientSel.addEventListener('change', () => fillProjects(clientSel.value));
+
+  wrapper.appendChild(clientSel);
+  wrapper.appendChild(projSel);
+  el.replaceWith(wrapper);
+  clientSel.focus();
+
+  const save = () => {
+    setTimeout(() => {
+      if (document.activeElement === clientSel || document.activeElement === projSel) return;
+      entry.client = clientSel.value;
+      entry.project = projSel.value;
+      apiUpdateTimeEntry(id, { client: entry.client, project: entry.project });
+      renderTime();
+    }, 100);
+  };
+  clientSel.addEventListener('blur', save);
+  projSel.addEventListener('blur', save);
 }
 
 function editTimeFields(el, start, end) {
@@ -1139,21 +1248,21 @@ function setupInvoiceCheckboxes() {
   });
 }
 
-function archiveCard(index) {
+async function archiveCard(index) {
   if (confirm('Remove this card?')) {
     const card = data.cards[index];
-    if (card) apiDeleteCard(card.id);
+    if (card) await apiDeleteCard(card.id);
     renderProjects();
   }
 }
 
-function toggleTask(cardId, taskId, done) {
+async function toggleTask(cardId, taskId, done) {
   const card = data.cards.find(c => c.id === cardId);
   if (!card || !card.tasks) return;
   const task = card.tasks.find(t => t.id === taskId);
   if (!task) return;
   task.done = done;
-  apiUpdateCard(cardId, card);
+  await apiUpdateCard(cardId, card);
   renderProjects();
 }
 
@@ -1163,14 +1272,18 @@ let currentEditTasks = [];
 let currentEditIndex = -1;
 let modalInitialized = false;
 
+let _addingEditNote = false;
 function addNote() {
+  if (_addingEditNote) return;
+  _addingEditNote = true;
   const input = document.getElementById('m-note-input');
   const text = input.value.trim();
-  if (!text) return;
+  if (!text) { _addingEditNote = false; return; }
   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   currentEditNotes.unshift({ text, date: today });
   input.value = '';
   refreshNotesList();
+  _addingEditNote = false;
 }
 
 function removeNote(i) {
@@ -1281,6 +1394,13 @@ function openCardModal(index) {
       </select>
     </div>
     <input type="text" id="m-client-new" placeholder="New client name" style="display:none;margin-top:6px;">
+    <label>Status</label>
+    <select id="m-status">
+      <option value="" ${!card.status ? 'selected' : ''}>None</option>
+      <option value="In Progress" ${card.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+      <option value="QA" ${card.status === 'QA' ? 'selected' : ''}>QA</option>
+      <option value="Complete" ${card.status === 'Complete' ? 'selected' : ''}>Complete</option>
+    </select>
     <label>Ticket (Jira # or URL)</label>
     <input type="text" id="m-ticket" value="${escapeHtml(card.ticket || '')}">
     <label>Tasks</label>
@@ -1330,7 +1450,11 @@ function openCardModal(index) {
     taskInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); addTask(); }
     });
-    taskInput.addEventListener('blur', () => { if (taskInput.value.trim()) addTask(); });
+    taskInput.addEventListener('blur', () => {
+      if (taskInput.isConnected && !document.getElementById('modalOverlay').classList.contains('hidden') && taskInput.value.trim()) {
+        addTask();
+      }
+    });
   }
 
   // Enter (no shift) or blur to add note; Shift+Enter for new line
@@ -1343,7 +1467,11 @@ function openCardModal(index) {
       noteInput.style.height = 'auto';
       noteInput.style.height = noteInput.scrollHeight + 'px';
     });
-    noteInput.addEventListener('blur', () => { if (noteInput.value.trim()) addNote(); });
+    noteInput.addEventListener('blur', () => {
+      if (noteInput.isConnected && !document.getElementById('modalOverlay').classList.contains('hidden') && noteInput.value.trim()) {
+        addNote();
+      }
+    });
   }
 }
 
@@ -1365,6 +1493,7 @@ async function saveCard(index) {
   const card = {
     client: clientName,
     project: document.getElementById('m-project').value.trim(),
+    status: document.getElementById('m-status').value,
     ticket: document.getElementById('m-ticket').value.trim(),
     description: document.getElementById('m-desc').value.trim(),
     tasks: (currentEditTasks || []).map(t => ({ id: t.id, text: t.text, done: t.done, dueDate: t.dueDate })),
@@ -1411,7 +1540,7 @@ function viewNotes(index) {
       `).join('')}
     </div>
     <div style="display:flex;gap:6px;margin-top:10px;">
-      <textarea id="vn-note-input" placeholder="Add a note... (Shift+Enter for new line)" rows="1" style="flex:1;background:#0a1628;border:1px solid #0f3460;color:#e0e0e0;padding:8px 10px;border-radius:6px;font-size:14px;font-family:inherit;resize:none;overflow:hidden;">
+      <textarea id="vn-note-input" placeholder="Add a note... (Shift+Enter for new line)" rows="1" style="flex:1;background:#0a1628;border:1px solid #0f3460;color:#e0e0e0;padding:8px 10px;border-radius:6px;font-size:14px;font-family:inherit;resize:none;overflow:hidden;"></textarea>
       <button class="btn btn-primary" onclick="addViewNote()" style="padding:6px 12px;">+</button>
     </div>
     <div class="modal-actions">
@@ -1448,14 +1577,22 @@ function viewNotes(index) {
       vnInput.style.height = 'auto';
       vnInput.style.height = vnInput.scrollHeight + 'px';
     });
-    vnInput.addEventListener('blur', () => { if (vnInput.value.trim()) addViewNote(); });
+    vnInput.addEventListener('blur', () => {
+      // Only auto-add if the modal is still open and input is still in DOM
+      if (vnInput.isConnected && !document.getElementById('modalOverlay').classList.contains('hidden') && vnInput.value.trim()) {
+        addViewNote();
+      }
+    });
   }
 }
 
+let _addingNote = false;
 function addViewNote() {
+  if (_addingNote) return;
+  _addingNote = true;
   const input = document.getElementById('vn-note-input');
   const text = input.value.trim();
-  if (!text) return;
+  if (!text) { _addingNote = false; return; }
   const card = data.cards[viewNotesIndex];
   if (!card) return;
   if (!Array.isArray(card.notes)) card.notes = card.notes ? [{ text: card.notes, date: '' }] : [];
@@ -1464,6 +1601,7 @@ function addViewNote() {
   apiUpdateCard(card.id, card);
   renderProjects();
   viewNotes(viewNotesIndex);
+  _addingNote = false;
 }
 
 function removeViewNote(i) {
@@ -1533,6 +1671,13 @@ function viewCard(index) {
   clientDiv.textContent = card.client || '';
   headerLeft.appendChild(h2);
   headerLeft.appendChild(clientDiv);
+  if (card.status) {
+    const badge = document.createElement('div');
+    badge.className = 'status-badge ' + (card.status === 'In Progress' ? 'in-progress' : card.status === 'QA' ? 'qa' : 'complete');
+    badge.textContent = card.status;
+    badge.style.marginTop = '6px';
+    headerLeft.appendChild(badge);
+  }
   const editBtn = document.createElement('button');
   editBtn.className = 'btn btn-primary';
   editBtn.style.cssText = 'padding:6px 14px;font-size:12px;';

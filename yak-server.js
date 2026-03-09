@@ -197,6 +197,23 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // Backup
+    if (req.method === 'POST' && p === '/api/backup') {
+      const backupDir = path.join(__dirname, 'backups');
+      if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir);
+      const now = new Date();
+      const stamp = now.getFullYear().toString() +
+        String(now.getMonth()+1).padStart(2,'0') +
+        String(now.getDate()).padStart(2,'0') + '-' +
+        String(now.getHours()).padStart(2,'0') +
+        String(now.getMinutes()).padStart(2,'0') +
+        String(now.getSeconds()).padStart(2,'0');
+      const dest = path.join(backupDir, `yak-data-${stamp}.json`);
+      fs.copyFileSync(DATA_FILE, dest);
+      json(res, { ok: true, file: `yak-data-${stamp}.json` });
+      return;
+    }
+
     res.writeHead(404);
     res.end('Not found');
   } catch (err) {
