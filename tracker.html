@@ -703,6 +703,26 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
+function linkify(text) {
+  // Escape HTML first, then convert URLs and image refs to links/imgs
+  let html = escapeHtml(text);
+  // Image references: ![alt](url)
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:6px;margin:6px 0;cursor:pointer;" onclick="window.open(this.src)">');
+  // URLs
+  html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" style="color:#5a9fd4;text-decoration:none;">$1</a>');
+  return html;
+}
+
+async function uploadImage(file) {
+  const res = await fetch('/api/images', {
+    method: 'POST',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  });
+  const data = await res.json();
+  return data.url;
+}
+
 // ── Client list ──
 function getClients() {
   return (data.clients || []).slice().sort();
@@ -858,10 +878,10 @@ function renderProjects() {
             </div>`).join('')
           }</div>` : '');
       })() : ''}
-      ${card.description ? `<div class="field-label">Description</div><div class="description">${escapeHtml(card.description)}</div>` : ''}
+      ${card.description ? `<div class="field-label">Description</div><div class="description">${linkify(card.description)}</div>` : ''}
       ${card.notes && card.notes.length ? `<div class="field-label">Notes</div><div class="notes" onclick="viewNotes(${index})">${
         (Array.isArray(card.notes) ? card.notes : [{text: card.notes, date: ''}])
-          .map(n => `<div class="note-item"><span class="note-date">${n.date || ''}</span> ${escapeHtml(n.text)}</div>`).join('')
+          .map(n => `<div class="note-item"><span class="note-date">${n.date || ''}</span> ${linkify(n.text)}</div>`).join('')
       }</div>${(Array.isArray(card.notes) ? card.notes : []).length > 3 ? `<div class="notes-expand" onclick="viewNotes(${index})">View all ${card.notes.length} notes</div>` : ''}` : ''}
       ${followupHtml}
     `;
@@ -1534,7 +1554,7 @@ function viewNotes(index) {
             <span style="color:#e94560;font-size:10px;font-weight:600;">${n.date || ''}</span>
             <button class="btn vn-remove" onclick="removeViewNote(${i})" style="background:none;color:#444;font-size:11px;padding:0 4px;min-width:auto;cursor:pointer;">✕</button>
           </div>
-          <div class="vn-display" data-vn-index="${i}" style="color:#ccc;font-size:13px;line-height:1.5;padding:4px 0;cursor:pointer;white-space:pre-wrap;word-break:break-word;">${escapeHtml(n.text)}</div>
+          <div class="vn-display" data-vn-index="${i}" style="color:#ccc;font-size:13px;line-height:1.5;padding:4px 0;cursor:pointer;white-space:pre-wrap;word-break:break-word;">${linkify(n.text)}</div>
           <textarea data-vn-index="${i}" style="display:none;width:100%;background:#0a1628;border:1px solid #0f3460;color:#ccc;padding:6px 8px;border-radius:4px;font-size:13px;font-family:inherit;line-height:1.5;resize:vertical;min-height:40px;">${escapeHtml(n.text)}</textarea>
         </div>
       `).join('')}
@@ -1771,7 +1791,7 @@ function viewCard(index) {
     descLabel.textContent = 'Description';
     const descDiv = document.createElement('div');
     descDiv.style.cssText = 'font-size:13px;color:#ccc;line-height:1.6;white-space:pre-wrap;padding:8px 0;';
-    descDiv.textContent = card.description;
+    descDiv.innerHTML = linkify(card.description);
     m.appendChild(descLabel);
     m.appendChild(descDiv);
   }
@@ -1793,7 +1813,7 @@ function viewCard(index) {
       dateSpan.textContent = n.date || '';
       const textSpan = document.createElement('span');
       textSpan.style.cssText = 'color:#ccc;white-space:pre-wrap;word-break:break-word;';
-      textSpan.textContent = n.text;
+      textSpan.innerHTML = linkify(n.text);
       noteDiv.appendChild(dateSpan);
       noteDiv.appendChild(textSpan);
       notesContainer.appendChild(noteDiv);
@@ -1845,6 +1865,23 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
 // Close modal on Escape
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal();
+});
+
+// Paste image into any textarea — uploads and inserts image reference
+document.addEventListener('paste', async e => {
+  const ta = document.activeElement;
+  if (!ta || ta.tagName !== 'TEXTAREA') return;
+  const items = [...(e.clipboardData || {}).items || []];
+  const imageItem = items.find(i => i.type.startsWith('image/'));
+  if (!imageItem) return;
+  e.preventDefault();
+  const file = imageItem.getAsFile();
+  const url = await uploadImage(file);
+  const ref = `![image](${url})`;
+  const start = ta.selectionStart;
+  ta.value = ta.value.slice(0, start) + ref + ta.value.slice(ta.selectionEnd);
+  ta.selectionStart = ta.selectionEnd = start + ref.length;
+  ta.dispatchEvent(new Event('input'));
 });
 
 // ── Init ──

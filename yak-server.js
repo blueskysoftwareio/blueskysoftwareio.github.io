@@ -197,6 +197,34 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // Upload image
+    if (req.method === 'POST' && p === '/api/images') {
+      const imgDir = path.join(__dirname, 'images');
+      if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir);
+      const chunks = [];
+      req.on('data', chunk => chunks.push(chunk));
+      await new Promise(resolve => req.on('end', resolve));
+      const buf = Buffer.concat(chunks);
+      const id = uid();
+      const ext = (req.headers['content-type'] || 'image/png').split('/')[1] || 'png';
+      const filename = `${id}.${ext}`;
+      fs.writeFileSync(path.join(imgDir, filename), buf);
+      json(res, { url: `/images/${filename}` }, 201);
+      return;
+    }
+
+    // Serve images
+    if (req.method === 'GET' && p.startsWith('/images/')) {
+      const imgPath = path.join(__dirname, p);
+      if (fs.existsSync(imgPath)) {
+        const ext = path.extname(imgPath).slice(1);
+        const types = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+        res.writeHead(200, { 'Content-Type': types[ext] || 'application/octet-stream' });
+        res.end(fs.readFileSync(imgPath));
+        return;
+      }
+    }
+
     // Backup
     if (req.method === 'POST' && p === '/api/backup') {
       const backupDir = path.join(__dirname, 'backups');
